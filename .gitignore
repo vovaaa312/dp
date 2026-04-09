@@ -1,0 +1,82 @@
+############################################
+# Root / system
+############################################
+.DS_Store
+Thumbs.db
+desktop.ini
+*.log
+*.tmp
+*.swp
+*.swo
+
+############################################
+# IDE (IntelliJ / JetBrains)
+############################################
+**/.idea/
+**/*.iml
+**/*.ipr
+**/*.iws
+**/out/
+
+############################################
+# Git metadata inside zip / accidental
+############################################
+**/.git/
+
+############################################
+# dp_ai (Python)
+############################################
+dp_ai/.venv/
+dp_ai/venv/
+dp_ai/.python-version
+
+**/__pycache__/
+**/*.py[cod]
+**/*.pyo
+**/*.pyd
+
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/.coverage
+**/coverage.xml
+**/htmlcov/
+
+############################################
+# dp_back (Java / Maven / Spring Boot)
+############################################
+dp_back/target/
+dp_back/**/target/
+
+# (на всякий случай) логи/дампы
+dp_back/*.log
+dp_back/**/logs/
+dp_back/**/*.hprof
+
+############################################
+# dp_front (Node / Vite)
+############################################
+dp_front/node_modules/
+dp_front/.vite/
+dp_front/dist/
+dp_front/build/
+dp_front/coverage/
+dp_front/.eslintcache
+dp_front/*.log
+dp_front/npm-debug.log*
+dp_front/yarn-debug.log*
+dp_front/yarn-error.log*
+dp_front/pnpm-debug.log*
+
+############################################
+# Env / secrets (если появятся)
+############################################
+.env
+.env.*
+*.local
+*.secret
+*.key
+*.pem
+*.p12
+*.jks
+credentials*.json
