@@ -36,6 +36,7 @@ export function NavBar() {
       </div>
       <div style={styles.userArea}>
         {user && <span style={styles.username}>{user.username}</span>}
+        <button style={styles.settingsBtn} onClick={() => navigate('/settings')}>Settings</button>
         <button style={styles.logoutBtn} onClick={handleLogout}>Logout</button>
       </div>
     </nav>
@@ -88,6 +89,15 @@ const styles: Record<string, React.CSSProperties> = {
   username: {
     color: '#9090bb',
     fontSize: 13,
+  },
+  settingsBtn: {
+    padding: '5px 10px',
+    background: 'transparent',
+    border: '1px solid #2d2d4e',
+    borderRadius: 6,
+    color: '#9090bb',
+    fontSize: 14,
+    cursor: 'pointer',
   },
   logoutBtn: {
     padding: '5px 14px',
