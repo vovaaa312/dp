@@ -20,13 +20,28 @@ def _get_trainer(trainer_type: str) -> BaseTrainer:
 @router.post("", response_model=TrainResponse, status_code=status.HTTP_202_ACCEPTED)
 def start_training(request: TrainRequest) -> TrainResponse:
     job_id = request.run_name
-    if job_store.get(job_id) is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"Job '{job_id}' already exists",
-        )
 
-    record = job_store.create(job_id=job_id, total_epochs=request.epochs)
+    existing = job_store.get(job_id)
+    if existing is not None:
+        if request.resume_from and existing.status in ("STOPPED", "FAILED"):
+            # Reset the record for resume
+            existing.status = "PENDING"
+            existing.stop_event.clear()
+            existing.error = None
+            existing.finished_at = None
+            trainer = _get_trainer(request.trainer_type)
+            trainer.start(existing, request)
+            return TrainResponse(job_id=job_id, status="RUNNING")
+        elif existing.status in ("RUNNING", "PENDING"):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Job '{job_id}' is already running",
+            )
+        else:
+            # Job finished — delete old record and create new
+            job_store.delete(job_id)
+
+    record = job_store.create(job_id=job_id, total_epochs=request.epochs, trainer_type=request.trainer_type)
     trainer = _get_trainer(request.trainer_type)
     trainer.start(record, request)
 
@@ -50,8 +65,7 @@ def stop_training(job_id: str) -> TrainResponse:
     if record.status not in ("RUNNING", "PENDING"):
         return TrainResponse(job_id=job_id, status=record.status)
 
-    trainer = _get_trainer(settings.trainer_type)
+    trainer = _get_trainer(record.trainer_type if hasattr(record, 'trainer_type') else settings.trainer_type)
     trainer.stop(record)
-    record.status = "STOPPED"
 
     return TrainResponse(job_id=job_id, status="STOPPED")

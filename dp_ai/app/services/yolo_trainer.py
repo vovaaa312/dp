@@ -55,24 +55,21 @@ def _parse_results_csv(csv_path: Path) -> EpochMetrics | None:
 
 def _resolve_dataset_yaml(dataset_path: str) -> str:
     """
-    If dataset_path is a directory, find the .yaml inside it and patch its 'path'
-    to the absolute directory so YOLO can find images/labels regardless of cwd.
-    Returns the path to the yaml file.
+    Auto-detect dataset format, convert to YOLO if needed,
+    then patch the yaml's 'path' to absolute.
     """
     import yaml as _yaml
+    from app.services.dataset_converter import detect_and_convert
 
     p = Path(dataset_path)
     if p.is_file():
-        return dataset_path  # already a yaml path
+        return dataset_path
 
-    # find a yaml file in the directory
-    yamls = list(p.glob("*.yaml")) + list(p.glob("*.yml"))
-    if not yamls:
-        raise FileNotFoundError(f"No .yaml file found in dataset directory: {dataset_path}")
+    # Auto-detect and convert (COCO, VOC, flat -> YOLO)
+    yaml_path_str = detect_and_convert(dataset_path)
+    yaml_path = Path(yaml_path_str)
 
-    yaml_path = yamls[0]
-
-    # read, patch 'path' to absolute, write a temp copy
+    # Patch 'path' to absolute
     with open(yaml_path) as f:
         cfg = _yaml.safe_load(f)
 
@@ -85,22 +82,29 @@ def _resolve_dataset_yaml(dataset_path: str) -> str:
     return str(patched_path)
 
 
+def _get_results_dir(request: TrainRequest) -> str:
+    """Get results directory — use per-user dir from backend if provided."""
+    if request.results_dir:
+        return request.results_dir
+    return str(settings.results_dir)
+
+
 def _run_yolo_training(record: JobRecord, request: TrainRequest) -> None:
     record.status = "RUNNING"
     record.started_at = datetime.now(timezone.utc)
 
     try:
-        from ultralytics import YOLO  # imported lazily — only needed when TRAINER_TYPE=yolo
+        from ultralytics import YOLO
     except ImportError:
         record.status = "FAILED"
         record.error = "ultralytics not installed; set TRAINER_TYPE=mock"
         record.finished_at = datetime.now(timezone.utc)
         return
 
-    run_dir = Path(settings.results_dir) / record.job_id
+    project_dir = _get_results_dir(request)
+    run_dir = Path(project_dir) / record.job_id
 
     def _poll_metrics() -> None:
-        """Background thread that reads results.csv and updates the record."""
         csv_path = run_dir / "results.csv"
         last_epoch = 0
         while not record.stop_event.is_set() and record.status == "RUNNING":
@@ -117,24 +121,40 @@ def _run_yolo_training(record: JobRecord, request: TrainRequest) -> None:
     poll_thread.start()
 
     def _on_epoch_end(trainer):
-        """Called by YOLO after each epoch — stop cleanly if requested."""
         if record.stop_event.is_set():
-            trainer.epoch = trainer.epochs  # trick YOLO into thinking training is done
+            trainer.epoch = trainer.epochs
 
     try:
         data_path = _resolve_dataset_yaml(request.dataset_path)
-        model = YOLO(request.model_name)
-        model.add_callback("on_train_epoch_end", _on_epoch_end)
-        model.train(
-            data=data_path,
-            epochs=request.epochs,
-            imgsz=request.imgsz,
-            batch=request.batch,
-            name=record.job_id,
-            project=str(settings.results_dir),
-            exist_ok=True,
-        )
-        record.stop_event.set()  # stop poll thread
+
+        # Resume from last.pt if specified
+        if request.resume_from and Path(request.resume_from).exists():
+            model = YOLO(request.resume_from)
+            model.add_callback("on_train_epoch_end", _on_epoch_end)
+            model.train(
+                data=data_path,
+                epochs=request.epochs,
+                imgsz=request.imgsz,
+                batch=request.batch,
+                name=record.job_id,
+                project=project_dir,
+                exist_ok=True,
+                resume=True,
+            )
+        else:
+            model = YOLO(request.model_name)
+            model.add_callback("on_train_epoch_end", _on_epoch_end)
+            model.train(
+                data=data_path,
+                epochs=request.epochs,
+                imgsz=request.imgsz,
+                batch=request.batch,
+                name=record.job_id,
+                project=project_dir,
+                exist_ok=True,
+            )
+
+        record.stop_event.set()
         best_pt = run_dir / "weights" / "best.pt"
         record.result_path = str(best_pt) if best_pt.exists() else None
         if record.status != "STOPPED":
@@ -143,7 +163,6 @@ def _run_yolo_training(record: JobRecord, request: TrainRequest) -> None:
         record.status = "FAILED"
         record.error = str(exc)
     finally:
-        # Always try to save best/last weights as result_path
         if record.result_path is None:
             for name in ("best.pt", "last.pt"):
                 wp = run_dir / "weights" / name
@@ -170,4 +189,4 @@ class YoloTrainer(BaseTrainer):
         if record.status == "RUNNING":
             record.status = "STOPPED"
             record.finished_at = datetime.now(timezone.utc)
-        record.stop_event.set()  # signals _on_epoch_end callback to stop YOLO after current epoch
+        record.stop_event.set()
