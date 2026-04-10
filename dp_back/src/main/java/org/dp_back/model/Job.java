@@ -44,6 +44,7 @@ public class Job {
 
     private String error;
     private String resultPath;
+    private String displayName;
 
     // FK to users table — no JPA relation to keep it simple
     private Long userId;

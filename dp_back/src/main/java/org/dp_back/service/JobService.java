@@ -10,7 +10,6 @@ import org.dp_back.model.dto.CreateJobRequest;
 import org.dp_back.model.dto.JobResponse;
 import org.dp_back.repository.JobRepository;
 import org.dp_back.repository.UserRepository;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -31,9 +30,6 @@ public class JobService {
     private final AiClientService aiClientService;
     private final FileStorageService fileStorageService;
 
-    @Value("${app.data-dir:/data}")
-    private String dataDir;
-
     public JobResponse createJob(CreateJobRequest request, String username) {
         String jobId = "job-" + UUID.randomUUID().toString().substring(0, 8);
 
@@ -41,7 +37,8 @@ public class JobService {
                 .map(u -> u.getId())
                 .orElse(null);
 
-        String datasetPath = fileStorageService.datasetsAbsolutePath(request.getDatasetName());
+        String datasetPath = fileStorageService.datasetsAbsolutePath(request.getDatasetName(), userId);
+        String resultsDir = fileStorageService.resultsAbsolutePath(userId);
 
         AiTrainRequest aiRequest = AiTrainRequest.builder()
                 .datasetPath(datasetPath)
@@ -51,6 +48,7 @@ public class JobService {
                 .batch(request.getBatch())
                 .runName(jobId)
                 .trainerType(request.getTrainerType())
+                .resultsDir(resultsDir)
                 .build();
 
         Job job = Job.builder()
@@ -84,9 +82,14 @@ public class JobService {
         return toResponse(job);
     }
 
-    public List<JobResponse> listJobs() {
-        return jobRepository.findAll().stream()
-                .sorted(Comparator.comparing(Job::getCreatedAt, Comparator.nullsLast(Comparator.reverseOrder())))
+    public List<JobResponse> listJobsForUser(String username) {
+        Long userId = userRepository.findByUsername(username)
+                .map(u -> u.getId())
+                .orElse(null);
+
+        if (userId == null) return List.of();
+
+        return jobRepository.findByUserIdOrderByCreatedAtDesc(userId).stream()
                 .map(this::toResponse)
                 .collect(Collectors.toList());
     }
@@ -111,6 +114,59 @@ public class JobService {
             job.setStatus(JobStatus.STOPPED);
             job.setFinishedAt(Instant.now());
             jobRepository.save(job);
+        }
+
+        return toResponse(job);
+    }
+
+    public JobResponse resumeJob(String jobId, String username) {
+        Job job = jobRepository.findById(jobId)
+                .orElseThrow(() -> new IllegalArgumentException("Job not found: " + jobId));
+
+        if (job.getStatus() != JobStatus.STOPPED && job.getStatus() != JobStatus.FAILED) {
+            throw new IllegalArgumentException("Can only resume STOPPED or FAILED jobs");
+        }
+
+        Long userId = userRepository.findByUsername(username)
+                .map(u -> u.getId())
+                .orElseThrow(() -> new IllegalStateException("User not found"));
+
+        String datasetPath = fileStorageService.datasetsAbsolutePath(job.getDatasetName(), userId);
+        String resultsDir = fileStorageService.resultsAbsolutePath(userId);
+
+        // Use last.pt from previous run to resume
+        String resumeFrom = null;
+        if (job.getResultPath() != null) {
+            String lastPt = job.getResultPath().replace("best.pt", "last.pt");
+            resumeFrom = lastPt;
+        }
+
+        AiTrainRequest aiRequest = AiTrainRequest.builder()
+                .datasetPath(datasetPath)
+                .modelName(resumeFrom != null ? resumeFrom : job.getModelName())
+                .epochs(job.getTotalEpochs())
+                .imgsz(640)
+                .batch(8)
+                .runName(jobId)
+                .trainerType(job.getTrainerType())
+                .resultsDir(resultsDir)
+                .resumeFrom(resumeFrom)
+                .build();
+
+        try {
+            aiClientService.startTraining(aiRequest);
+            job.setStatus(JobStatus.RUNNING);
+            job.setStartedAt(Instant.now());
+            job.setFinishedAt(null);
+            job.setError(null);
+            jobRepository.save(job);
+            log.info("Training job {} resumed successfully", jobId);
+        } catch (Exception ex) {
+            job.setStatus(JobStatus.FAILED);
+            job.setError("Resume failed: " + ex.getMessage());
+            job.setFinishedAt(Instant.now());
+            jobRepository.save(job);
+            log.error("Failed to resume job {}: {}", jobId, ex.getMessage());
         }
 
         return toResponse(job);
@@ -151,6 +207,45 @@ public class JobService {
         }
     }
 
+    public JobResponse renameJob(String jobId, String displayName, String username) {
+        Job job = jobRepository.findById(jobId)
+                .orElseThrow(() -> new IllegalArgumentException("Job not found: " + jobId));
+
+        Long userId = userRepository.findByUsername(username)
+                .map(u -> u.getId())
+                .orElseThrow(() -> new IllegalStateException("User not found"));
+
+        if (!job.getUserId().equals(userId)) {
+            throw new IllegalArgumentException("Not authorized to rename this job");
+        }
+
+        job.setDisplayName(displayName);
+        jobRepository.save(job);
+        return toResponse(job);
+    }
+
+    public void deleteModel(String jobId, String username) {
+        Job job = jobRepository.findById(jobId)
+                .orElseThrow(() -> new IllegalArgumentException("Job not found: " + jobId));
+
+        Long userId = userRepository.findByUsername(username)
+                .map(u -> u.getId())
+                .orElseThrow(() -> new IllegalStateException("User not found"));
+
+        if (!job.getUserId().equals(userId)) {
+            throw new IllegalArgumentException("Not authorized to delete this job");
+        }
+
+        // Try to delete files, but don't fail if they don't exist
+        try {
+            fileStorageService.deleteModel(userId, jobId);
+        } catch (Exception ex) {
+            log.warn("Could not delete model files for job {}: {}", jobId, ex.getMessage());
+        }
+
+        jobRepository.deleteById(jobId);
+    }
+
     private JobResponse toResponse(Job job) {
         return JobResponse.builder()
                 .jobId(job.getJobId())
@@ -167,6 +262,7 @@ public class JobService {
                 .finishedAt(job.getFinishedAt())
                 .error(job.getError())
                 .resultPath(job.getResultPath())
+                .displayName(job.getDisplayName())
                 .build();
     }
 }

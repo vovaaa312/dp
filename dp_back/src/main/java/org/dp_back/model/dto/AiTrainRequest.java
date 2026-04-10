@@ -23,4 +23,10 @@ public class AiTrainRequest {
 
     @JsonProperty("trainer_type")
     private String trainerType;
+
+    @JsonProperty("results_dir")
+    private String resultsDir;
+
+    @JsonProperty("resume_from")
+    private String resumeFrom;
 }

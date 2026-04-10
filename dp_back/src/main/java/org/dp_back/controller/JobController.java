@@ -27,8 +27,8 @@ public class JobController {
     }
 
     @GetMapping
-    public ResponseEntity<List<JobResponse>> listJobs() {
-        return ResponseEntity.ok(jobService.listJobs());
+    public ResponseEntity<List<JobResponse>> listJobs(Principal principal) {
+        return ResponseEntity.ok(jobService.listJobsForUser(principal.getName()));
     }
 
     @GetMapping("/{jobId}")
@@ -46,6 +46,43 @@ public class JobController {
             return ResponseEntity.ok(jobService.stopJob(jobId));
         } catch (IllegalArgumentException ex) {
             return ResponseEntity.notFound().build();
+        }
+    }
+
+    @PostMapping("/{jobId}/resume")
+    public ResponseEntity<JobResponse> resumeJob(@PathVariable String jobId, Principal principal) {
+        try {
+            return ResponseEntity.ok(jobService.resumeJob(jobId, principal.getName()));
+        } catch (IllegalArgumentException ex) {
+            return ResponseEntity.notFound().build();
+        }
+    }
+
+    @PatchMapping("/{jobId}/name")
+    public ResponseEntity<?> renameJob(@PathVariable String jobId,
+                                       @RequestBody Map<String, String> body,
+                                       Principal principal) {
+        String name = body.get("displayName");
+        if (name == null || name.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "displayName is required"));
+        }
+        try {
+            return ResponseEntity.ok(jobService.renameJob(jobId, name.trim(), principal.getName()));
+        } catch (IllegalArgumentException ex) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", ex.getMessage()));
+        }
+    }
+
+    @DeleteMapping("/{jobId}/model")
+    public ResponseEntity<?> deleteModel(@PathVariable String jobId, Principal principal) {
+        try {
+            jobService.deleteModel(jobId, principal.getName());
+            return ResponseEntity.ok(Map.of("message", "Job deleted successfully"));
+        } catch (IllegalArgumentException ex) {
+            if (ex.getMessage().contains("Not authorized")) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", ex.getMessage()));
+            }
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", ex.getMessage()));
         }
     }
 
