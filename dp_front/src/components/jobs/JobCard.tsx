@@ -8,8 +8,9 @@ interface Props {
 
 export function JobCard({ job }: Props) {
   const navigate = useNavigate();
+  const displayEpoch = Math.min(job.currentEpoch, job.totalEpochs);
   const progress = job.totalEpochs > 0
-    ? Math.round((job.currentEpoch / job.totalEpochs) * 100)
+    ? Math.min(100, Math.round((displayEpoch / job.totalEpochs) * 100))
     : 0;
 
   return (
@@ -19,14 +20,15 @@ export function JobCard({ job }: Props) {
     >
       <div style={styles.header}>
         <div>
-          <div style={styles.jobId}>{job.jobId}</div>
+          <div style={styles.jobId}>{job.displayName || job.jobId}</div>
+          {job.displayName && <div style={styles.jobIdSmall}>{job.jobId}</div>}
           <div style={styles.subtitle}>{job.datasetName} · {job.modelName}</div>
         </div>
         <StatusBadge status={job.status} />
       </div>
 
       <div style={styles.meta}>
-        <span>Epochs: {job.currentEpoch}/{job.totalEpochs}</span>
+        <span>Epochs: {displayEpoch}/{job.totalEpochs}</span>
         <span>Trainer: {job.trainerType}</span>
         {job.metrics && (
           <span>mAP50: {(job.metrics.mAP50 * 100).toFixed(1)}%</span>
@@ -63,6 +65,12 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 700,
     color: '#c0c0ff',
     fontFamily: 'monospace',
+  },
+  jobIdSmall: {
+    fontSize: 10,
+    color: '#4040aa',
+    fontFamily: 'monospace',
+    marginTop: 1,
   },
   subtitle: {
     fontSize: 12,

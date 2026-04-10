@@ -1,8 +1,20 @@
+import { useMutation } from '@tanstack/react-query';
+import { deleteDataset } from '../api/client';
 import { useDatasets } from '../hooks/useDatasets';
 import { DatasetUpload } from '../components/datasets/DatasetUpload';
+import { useState } from 'react';
 
 export function DatasetsPage() {
   const { data: datasets, isLoading, refetch } = useDatasets();
+  const [deletingDataset, setDeletingDataset] = useState<string | null>(null);
+
+  const deleteMutation = useMutation({
+    mutationFn: (name: string) => deleteDataset(name),
+    onSuccess: () => {
+      setDeletingDataset(null);
+      refetch();
+    },
+  });
 
   return (
     <div>
@@ -35,6 +47,18 @@ export function DatasetsPage() {
               <li key={name} style={styles.listItem}>
                 <span style={styles.datasetIcon}>📁</span>
                 <span style={styles.datasetName}>{name}</span>
+                <button
+                  style={styles.deleteBtn}
+                  onClick={() => {
+                    if (window.confirm(`Delete dataset "${name}"?`)) {
+                      setDeletingDataset(name);
+                      deleteMutation.mutate(name);
+                    }
+                  }}
+                  disabled={deletingDataset === name}
+                >
+                  {deletingDataset === name ? 'Deleting...' : 'Delete'}
+                </button>
               </li>
             ))}
           </ul>
@@ -78,7 +102,19 @@ const styles: Record<string, React.CSSProperties> = {
     border: '1px solid #2d2d4e',
     borderRadius: 8,
     marginBottom: 8,
+    justifyContent: 'space-between',
   },
-  datasetIcon: { fontSize: 16 },
-  datasetName: { fontSize: 14, color: '#c0c0ff', fontFamily: 'monospace' },
+  datasetIcon: { fontSize: 16, flexShrink: 0 },
+  datasetName: { fontSize: 14, color: '#c0c0ff', fontFamily: 'monospace', flex: 1 },
+  deleteBtn: {
+    padding: '4px 10px',
+    background: '#3a1a1a',
+    border: '1px solid #6a2a2a',
+    borderRadius: 4,
+    color: '#ff8888',
+    fontSize: 11,
+    cursor: 'pointer',
+    fontWeight: 500,
+    flexShrink: 0,
+  },
 };
