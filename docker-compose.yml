@@ -26,7 +26,7 @@ services:
     container_name: dp_ai
     environment:
       - DATA_DIR=/data
-      - TRAINER_TYPE=mock
+      - TRAINER_TYPE=yolo
     volumes:
       - dp_data:/data
     ports:
@@ -40,6 +40,7 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
+    runtime: nvidia
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 10s
