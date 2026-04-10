@@ -9,6 +9,7 @@ import { InferencePage } from './pages/InferencePage';
 import { DatasetsPage } from './pages/DatasetsPage';
 import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
+import { SettingsPage } from './pages/SettingsPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -38,6 +39,7 @@ function App() {
               <Route path="jobs/:jobId" element={<JobDetailPage />} />
               <Route path="datasets" element={<DatasetsPage />} />
               <Route path="inference" element={<InferencePage />} />
+              <Route path="settings" element={<SettingsPage />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>
           </Routes>
