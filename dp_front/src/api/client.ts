@@ -48,6 +48,9 @@ export const createJob = (payload: CreateJobPayload): Promise<Job> =>
 export const stopJob = (jobId: string): Promise<Job> =>
   api.delete<Job>(`/jobs/${jobId}`).then(r => r.data);
 
+export const resumeJob = (jobId: string): Promise<Job> =>
+  api.post<Job>(`/jobs/${jobId}/resume`).then(r => r.data);
+
 // Datasets
 export const getDatasets = (): Promise<string[]> =>
   api.get<string[]>('/datasets').then(r => r.data);
@@ -78,5 +81,33 @@ export const runInference = (
     })
     .then(r => r.data);
 };
+
+// User management
+export const resetPassword = (username: string, currentPassword: string, newPassword: string): Promise<{message: string}> =>
+  api.post<{message: string}>('/auth/reset-password', {
+    username,
+    currentPassword,
+    newPassword,
+  }).then(r => r.data);
+
+export const changeUsername = (newUsername: string): Promise<AuthResponse> =>
+  api.put<AuthResponse>('/user/username', { newUsername }).then(r => r.data);
+
+export const forgotPassword = (username: string): Promise<{message: string}> =>
+  api.post<{message: string}>('/auth/forgot-password', { username }).then(r => r.data);
+
+export const resetPasswordWithToken = (resetToken: string, newPassword: string): Promise<{message: string}> =>
+  api.post<{message: string}>('/auth/reset-password-token', { resetToken, newPassword }).then(r => r.data);
+
+// Dataset management
+export const deleteDataset = (datasetName: string): Promise<{message: string}> =>
+  api.delete<{message: string}>(`/datasets/${datasetName}`).then(r => r.data);
+
+// Model management
+export const deleteModel = (jobId: string): Promise<{message: string}> =>
+  api.delete<{message: string}>(`/jobs/${jobId}/model`).then(r => r.data);
+
+export const renameJob = (jobId: string, displayName: string): Promise<Job> =>
+  api.patch<Job>(`/jobs/${jobId}/name`, { displayName }).then(r => r.data);
 
 export default api;

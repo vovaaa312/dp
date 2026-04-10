@@ -41,6 +41,7 @@ export interface Job {
   finishedAt: string | null;
   error: string | null;
   resultPath: string | null;
+  displayName: string | null;
 }
 
 export interface CreateJobPayload {
