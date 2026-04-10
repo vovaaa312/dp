@@ -35,15 +35,19 @@ def _run_mock_training(record: JobRecord, request: TrainRequest) -> None:
     record.status = "RUNNING"
     record.started_at = datetime.now(timezone.utc)
 
-    result_dir = Path(settings.results_dir) / record.job_id / "weights"
+    project_dir = request.results_dir if request.results_dir else str(settings.results_dir)
+    result_dir = Path(project_dir) / record.job_id / "weights"
     result_dir.mkdir(parents=True, exist_ok=True)
 
+    # If resuming, start from where we left off
+    start_epoch = 1
+    if request.resume_from and record.metrics_history:
+        start_epoch = len(record.metrics_history) + 1
+
     try:
-        for epoch in range(1, request.epochs + 1):
+        for epoch in range(start_epoch, request.epochs + 1):
             if record.stop_event.is_set():
-                record.status = "STOPPED"
-                record.finished_at = datetime.now(timezone.utc)
-                return
+                break
 
             time.sleep(0.6)
 
@@ -57,7 +61,10 @@ def _run_mock_training(record: JobRecord, request: TrainRequest) -> None:
         best_pt.write_text(f"mock_model:{request.model_name}\n")
 
         record.result_path = str(result_dir / "best.pt")
-        record.status = "COMPLETED"
+        if record.stop_event.is_set():
+            record.status = "STOPPED"
+        else:
+            record.status = "COMPLETED"
         record.finished_at = datetime.now(timezone.utc)
 
     except Exception as exc:

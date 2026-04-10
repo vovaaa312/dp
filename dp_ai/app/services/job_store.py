@@ -10,11 +10,12 @@ from app.schemas.training import EpochMetrics, JobStatusResponse
 class JobRecord:
     """Mutable job state held in memory."""
 
-    def __init__(self, job_id: str, total_epochs: int) -> None:
+    def __init__(self, job_id: str, total_epochs: int, trainer_type: str = "mock") -> None:
         self.job_id = job_id
         self.status: str = "PENDING"
         self.current_epoch: int = 0
         self.total_epochs: int = total_epochs
+        self.trainer_type: str = trainer_type
         self.metrics: Optional[EpochMetrics] = None
         self.metrics_history: list[EpochMetrics] = []
         self.started_at: Optional[datetime] = None
@@ -45,8 +46,8 @@ class JobStore:
         self._jobs: dict[str, JobRecord] = {}
         self._lock = threading.Lock()
 
-    def create(self, job_id: str, total_epochs: int) -> JobRecord:
-        record = JobRecord(job_id=job_id, total_epochs=total_epochs)
+    def create(self, job_id: str, total_epochs: int, trainer_type: str = "mock") -> JobRecord:
+        record = JobRecord(job_id=job_id, total_epochs=total_epochs, trainer_type=trainer_type)
         with self._lock:
             self._jobs[job_id] = record
         return record

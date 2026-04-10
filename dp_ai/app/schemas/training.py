@@ -13,6 +13,8 @@ class TrainRequest(BaseModel):
     batch: int = Field(default=8, ge=1, le=256)
     run_name: str = Field(..., description="Unique job identifier used as run name")
     trainer_type: str = Field(default="mock", description="'mock' or 'yolo'")
+    results_dir: Optional[str] = Field(default=None, description="Override results directory (per-user)")
+    resume_from: Optional[str] = Field(default=None, description="Path to last.pt to resume training")
 
 
 class EpochMetrics(BaseModel):
