@@ -38,6 +38,12 @@ public class User implements UserDetails {
     @Builder.Default
     private Instant createdAt = Instant.now();
 
+    @Column(nullable = true)
+    private String resetToken;
+
+    @Column(nullable = true)
+    private Instant resetTokenExpiresAt;
+
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
         return List.of(new SimpleGrantedAuthority("ROLE_" + role.name()));
