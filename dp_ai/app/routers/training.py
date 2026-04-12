@@ -1,4 +1,7 @@
-from fastapi import APIRouter, HTTPException, status
+from pathlib import Path
+
+from fastapi import APIRouter, HTTPException, Query, status
+from fastapi.responses import PlainTextResponse
 
 from app.config import settings
 from app.schemas.training import TrainRequest, TrainResponse, JobStatusResponse
@@ -54,6 +57,20 @@ def get_job_status(job_id: str) -> JobStatusResponse:
     if record is None:
         raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found")
     return record.to_response()
+
+
+@router.get("/{job_id}/logs", response_class=PlainTextResponse)
+def get_training_logs(job_id: str, lines: int = Query(default=200, ge=1, le=5000)) -> str:
+    record = job_store.get(job_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found")
+    if not record.log_path:
+        raise HTTPException(status_code=404, detail="No log file available for this job yet")
+    log_file = Path(record.log_path)
+    if not log_file.exists():
+        raise HTTPException(status_code=404, detail="Log file not found on disk")
+    all_lines = log_file.read_text(encoding="utf-8").splitlines()
+    return "\n".join(all_lines[-lines:])
 
 
 @router.delete("/{job_id}", response_model=TrainResponse)

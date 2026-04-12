@@ -14,19 +14,17 @@ const COLORS = [
 
 export function DetectionResults({ imageFile, detections, inferenceTimeMs }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const imgRef = useRef<HTMLImageElement | null>(null);
 
   useEffect(() => {
     const url = URL.createObjectURL(imageFile);
     const img = new Image();
     img.src = url;
-    imgRef.current = img;
 
     img.onload = () => {
       const canvas = canvasRef.current;
       if (!canvas) return;
 
-      const maxW = 700;
+      const maxW = 560;
       const scale = Math.min(1, maxW / img.width);
       canvas.width = img.width * scale;
       canvas.height = img.height * scale;
@@ -61,31 +59,42 @@ export function DetectionResults({ imageFile, detections, inferenceTimeMs }: Pro
         <span>Inference: {inferenceTimeMs.toFixed(1)} ms</span>
       </div>
 
-      <canvas ref={canvasRef} style={styles.canvas} />
+      <div style={styles.sideBySide}>
+        {/* Left: image with bounding boxes */}
+        <div style={styles.imagePanel}>
+          <canvas ref={canvasRef} style={styles.canvas} />
+        </div>
 
-      {detections.length > 0 && (
-        <table style={styles.table}>
-          <thead>
-            <tr>
-              {['#', 'Class', 'Confidence', 'Bounding Box'].map(h => (
-                <th key={h} style={styles.th}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {detections.map((det, i) => (
-              <tr key={i} style={{ borderBottom: '1px solid #2d2d4e' }}>
-                <td style={styles.td}>{i + 1}</td>
-                <td style={styles.td}>{det.class_name}</td>
-                <td style={styles.td}>{(det.confidence * 100).toFixed(1)}%</td>
-                <td style={{ ...styles.td, fontFamily: 'monospace', fontSize: 11 }}>
-                  [{det.bbox.map(v => v.toFixed(0)).join(', ')}]
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+        {/* Right: detections table */}
+        {detections.length > 0 && (
+          <div style={styles.tablePanel}>
+            <table style={styles.table}>
+              <thead>
+                <tr>
+                  {['#', 'Class', 'Conf', 'Bbox'].map(h => (
+                    <th key={h} style={styles.th}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {detections.map((det, i) => (
+                  <tr key={i} style={styles.row}>
+                    <td style={styles.td}>
+                      <span style={{ ...styles.dot, background: COLORS[i % COLORS.length] }} />
+                      {i + 1}
+                    </td>
+                    <td style={styles.td}>{det.class_name}</td>
+                    <td style={styles.td}>{(det.confidence * 100).toFixed(1)}%</td>
+                    <td style={{ ...styles.td, fontFamily: 'monospace', fontSize: 11 }}>
+                      [{det.bbox.map(v => v.toFixed(0)).join(', ')}]
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -98,28 +107,59 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 13,
     color: '#8080bb',
   },
+  sideBySide: {
+    display: 'flex',
+    gap: 20,
+    alignItems: 'flex-start',
+    flexWrap: 'wrap' as const,
+  },
+  imagePanel: {
+    flex: '1 1 400px',
+    minWidth: 0,
+  },
   canvas: {
-    maxWidth: '100%',
+    width: '100%',
     borderRadius: 8,
     border: '1px solid #2d2d4e',
     display: 'block',
-    marginBottom: 16,
+  },
+  tablePanel: {
+    flex: '0 0 340px',
+    maxHeight: 500,
+    overflowY: 'auto' as const,
+    background: '#1a1a2e',
+    border: '1px solid #2d2d4e',
+    borderRadius: 8,
   },
   table: {
     width: '100%',
-    borderCollapse: 'collapse',
+    borderCollapse: 'collapse' as const,
     fontSize: 13,
   },
   th: {
-    textAlign: 'left',
-    padding: '6px 10px',
+    textAlign: 'left' as const,
+    padding: '8px 10px',
     color: '#7070aa',
     borderBottom: '1px solid #3d3d6e',
     fontWeight: 500,
     fontSize: 12,
+    position: 'sticky' as const,
+    top: 0,
+    background: '#1a1a2e',
+  },
+  row: {
+    borderBottom: '1px solid #1d1d3e',
   },
   td: {
     padding: '6px 10px',
     color: '#c0c0ee',
+  },
+  dot: {
+    display: 'inline-block',
+    width: 8,
+    height: 8,
+    borderRadius: '50%',
+    marginRight: 6,
+    verticalAlign: 'middle',
   },
 };

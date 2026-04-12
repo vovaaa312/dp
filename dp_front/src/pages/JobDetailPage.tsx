@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useJob } from '../hooks/useJob';
-import { stopJob, resumeJob, deleteModel, renameJob } from '../api/client';
+import { stopJob, resumeJob, deleteModel, renameJob, getJobLogs } from '../api/client';
 import { MetricsChart } from '../components/charts/MetricsChart';
 import { StatusBadge } from '../components/jobs/StatusBadge';
 
@@ -15,6 +15,22 @@ export function JobDetailPage() {
 
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState('');
+
+  const isTerminal = job?.status === 'COMPLETED' || job?.status === 'FAILED' || job?.status === 'STOPPED';
+  const { data: logs } = useQuery({
+    queryKey: ['job-logs', jobId],
+    queryFn: () => getJobLogs(jobId!),
+    enabled: !!jobId && !!job,
+    refetchInterval: isTerminal ? false : 3000,
+    retry: false,
+  });
+
+  const logBoxRef = useRef<HTMLPreElement>(null);
+  useEffect(() => {
+    if (logBoxRef.current) {
+      logBoxRef.current.scrollTop = logBoxRef.current.scrollHeight;
+    }
+  }, [logs]);
 
   const stopMutation = useMutation({
     mutationFn: () => stopJob(jobId!),
@@ -155,6 +171,15 @@ export function JobDetailPage() {
       <h3 style={styles.sectionTitle}>Training Curves</h3>
       <MetricsChart history={job.metricsHistory ?? []} />
 
+      <h3 style={styles.sectionTitle}>Training Log</h3>
+      <pre ref={logBoxRef} style={styles.logBox}>
+        {logs
+          ? logs
+          : isTerminal
+            ? <span style={styles.logHint}>No log file for this job.</span>
+            : <span style={styles.logHint}>⏳ Waiting for training to start…</span>}
+      </pre>
+
       {job.error && (
         <div style={styles.errorBox}>
           <strong>Error:</strong> {job.error}
@@ -234,4 +259,21 @@ const styles: Record<string, React.CSSProperties> = {
   metaValue: { color: '#c0c0ff', fontFamily: 'monospace' },
   hint: { color: '#5050aa', fontSize: 14 },
   error: { color: '#ff8888', fontSize: 14 },
+  logBox: {
+    background: '#07070f',
+    border: '1px solid #2d2d4e',
+    borderRadius: 8,
+    padding: '12px 16px',
+    fontSize: 12,
+    fontFamily: 'monospace',
+    color: '#a0c0ff',
+    whiteSpace: 'pre-wrap' as const,
+    wordBreak: 'break-all' as const,
+    minHeight: 80,
+    maxHeight: 380,
+    overflowY: 'auto' as const,
+    marginBottom: 20,
+    lineHeight: 1.7,
+  },
+  logHint: { color: '#5050aa', fontStyle: 'italic' as const },
 };

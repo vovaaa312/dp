@@ -4,8 +4,10 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.dp_back.model.dto.CreateJobRequest;
 import org.dp_back.model.dto.JobResponse;
+import org.dp_back.service.AiClientService;
 import org.dp_back.service.JobService;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -19,6 +21,7 @@ import java.util.Map;
 public class JobController {
 
     private final JobService jobService;
+    private final AiClientService aiClientService;
 
     @PostMapping
     public ResponseEntity<JobResponse> createJob(@Valid @RequestBody CreateJobRequest request, Principal principal) {
@@ -84,6 +87,13 @@ public class JobController {
             }
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", ex.getMessage()));
         }
+    }
+
+    @GetMapping(value = "/{jobId}/logs", produces = MediaType.TEXT_PLAIN_VALUE)
+    public ResponseEntity<String> getJobLogs(@PathVariable String jobId) {
+        return aiClientService.getJobLogs(jobId)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
     }
 
     @GetMapping("/health")

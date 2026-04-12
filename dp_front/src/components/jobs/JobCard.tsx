@@ -1,6 +1,8 @@
 import { useNavigate } from 'react-router-dom';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { Job } from '../../types';
 import { StatusBadge } from './StatusBadge';
+import { deleteModel } from '../../api/client';
 
 interface Props {
   job: Job;
@@ -8,10 +10,26 @@ interface Props {
 
 export function JobCard({ job }: Props) {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+
   const displayEpoch = Math.min(job.currentEpoch, job.totalEpochs);
   const progress = job.totalEpochs > 0
     ? Math.min(100, Math.round((displayEpoch / job.totalEpochs) * 100))
     : 0;
+
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteModel(job.jobId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['jobs'] }),
+  });
+
+  const isTerminal = job.status === 'COMPLETED' || job.status === 'FAILED' || job.status === 'STOPPED';
+
+  const handleDelete = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (window.confirm(`Delete job "${job.displayName || job.jobId}" and its model files?`)) {
+      deleteMutation.mutate();
+    }
+  };
 
   return (
     <div
@@ -24,7 +42,19 @@ export function JobCard({ job }: Props) {
           {job.displayName && <div style={styles.jobIdSmall}>{job.jobId}</div>}
           <div style={styles.subtitle}>{job.datasetName} · {job.modelName}</div>
         </div>
-        <StatusBadge status={job.status} />
+        <div style={styles.rightCol}>
+          <StatusBadge status={job.status} />
+          {isTerminal && (
+            <button
+              style={styles.deleteBtn}
+              onClick={handleDelete}
+              disabled={deleteMutation.isPending}
+              title="Delete job and model files"
+            >
+              {deleteMutation.isPending ? '…' : '✕'}
+            </button>
+          )}
+        </div>
       </div>
 
       <div style={styles.meta}>
@@ -59,6 +89,22 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     marginBottom: 8,
+  },
+  rightCol: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+  },
+  deleteBtn: {
+    background: '#3a1a1a',
+    border: '1px solid #6a2a2a',
+    borderRadius: 6,
+    color: '#ff8888',
+    fontSize: 12,
+    fontWeight: 700,
+    cursor: 'pointer',
+    padding: '2px 8px',
+    lineHeight: 1.4,
   },
   jobId: {
     fontSize: 14,

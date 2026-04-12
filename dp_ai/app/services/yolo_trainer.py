@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import csv
+import logging
+import re
 import threading
 import time
+import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -10,6 +13,8 @@ from app.config import settings
 from app.schemas.training import EpochMetrics, TrainRequest
 from app.services.job_store import JobRecord
 from app.services.trainer_base import BaseTrainer
+
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 
 
 def _parse_results_csv(csv_path: Path) -> EpochMetrics | None:
@@ -89,6 +94,26 @@ def _get_results_dir(request: TrainRequest) -> str:
     return str(settings.results_dir)
 
 
+class _StripAnsiFormatter(logging.Formatter):
+    """Strip ANSI color codes from ultralytics log messages."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        msg = super().format(record)
+        return _ANSI_RE.sub("", msg)
+
+
+def _make_job_logger(log_path: Path) -> logging.Logger:
+    """Create a file logger for a specific training job."""
+    logger = logging.getLogger(f"job.{log_path.parent.name}")
+    logger.setLevel(logging.DEBUG)
+    logger.handlers.clear()
+    handler = logging.FileHandler(log_path, mode="w", encoding="utf-8")
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s", datefmt="%Y-%m-%d %H:%M:%S"))
+    logger.addHandler(handler)
+    logger.propagate = False
+    return logger
+
+
 def _run_yolo_training(record: JobRecord, request: TrainRequest) -> None:
     record.status = "RUNNING"
     record.started_at = datetime.now(timezone.utc)
@@ -103,6 +128,21 @@ def _run_yolo_training(record: JobRecord, request: TrainRequest) -> None:
 
     project_dir = _get_results_dir(request)
     run_dir = Path(project_dir) / record.job_id
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    log_path = run_dir / "training.log"
+    record.log_path = str(log_path)
+    logger = _make_job_logger(log_path)
+
+    logger.info("=" * 60)
+    logger.info(f"Job ID      : {record.job_id}")
+    logger.info(f"Model       : {request.model_name}")
+    logger.info(f"Dataset     : {request.dataset_path}")
+    logger.info(f"Epochs      : {request.epochs}")
+    logger.info(f"Image size  : {request.imgsz}")
+    logger.info(f"Batch size  : {request.batch}")
+    logger.info(f"Resume from : {request.resume_from or 'none'}")
+    logger.info("=" * 60)
 
     def _poll_metrics() -> None:
         csv_path = run_dir / "results.csv"
@@ -115,6 +155,11 @@ def _run_yolo_training(record: JobRecord, request: TrainRequest) -> None:
                     record.current_epoch = last_epoch
                     record.metrics = m
                     record.metrics_history.append(m)
+                    logger.info(
+                        f"Epoch {m.epoch:>4}/{record.total_epochs} | "
+                        f"box_loss={m.box_loss:.4f}  cls_loss={m.cls_loss:.4f}  dfl_loss={m.dfl_loss:.4f} | "
+                        f"mAP50={m.mAP50:.4f}  mAP50-95={m.mAP50_95:.4f}"
+                    )
             time.sleep(2)
 
     poll_thread = threading.Thread(target=_poll_metrics, daemon=True)
@@ -124,8 +169,21 @@ def _run_yolo_training(record: JobRecord, request: TrainRequest) -> None:
         if record.stop_event.is_set():
             trainer.epoch = trainer.epochs
 
+    # Attach a file handler to the ultralytics logger so its messages
+    # (optimizer info, dataset scanning, AMP checks, etc.) land in training.log
+    ul_logger = logging.getLogger("ultralytics")
+    ul_handler = logging.FileHandler(log_path, mode="a", encoding="utf-8")
+    ul_handler.setFormatter(_StripAnsiFormatter("%(asctime)s %(message)s", datefmt="%Y-%m-%d %H:%M:%S"))
+    ul_logger.addHandler(ul_handler)
+
     try:
+        # Force non-interactive matplotlib backend (required in headless Docker)
+        import matplotlib
+        matplotlib.use("Agg")
+
         data_path = _resolve_dataset_yaml(request.dataset_path)
+        logger.info(f"Dataset YAML: {data_path}")
+        logger.info("Training started")
 
         # Resume from last.pt if specified
         if request.resume_from and Path(request.resume_from).exists():
@@ -140,6 +198,7 @@ def _run_yolo_training(record: JobRecord, request: TrainRequest) -> None:
                 project=project_dir,
                 exist_ok=True,
                 resume=True,
+                workers=0,
             )
         else:
             model = YOLO(request.model_name)
@@ -152,6 +211,7 @@ def _run_yolo_training(record: JobRecord, request: TrainRequest) -> None:
                 name=record.job_id,
                 project=project_dir,
                 exist_ok=True,
+                workers=0,
             )
 
         record.stop_event.set()
@@ -159,9 +219,13 @@ def _run_yolo_training(record: JobRecord, request: TrainRequest) -> None:
         record.result_path = str(best_pt) if best_pt.exists() else None
         if record.status != "STOPPED":
             record.status = "COMPLETED"
-    except Exception as exc:
+            logger.info("Training COMPLETED successfully")
+    except BaseException as exc:
         record.status = "FAILED"
         record.error = str(exc)
+        logger.error(f"Training FAILED: {exc}")
+        logger.error(f"Traceback:\n{traceback.format_exc()}")
+        raise
     finally:
         if record.result_path is None:
             for name in ("best.pt", "last.pt"):
@@ -169,8 +233,18 @@ def _run_yolo_training(record: JobRecord, request: TrainRequest) -> None:
                 if wp.exists():
                     record.result_path = str(wp)
                     break
+        if record.status == "STOPPED":
+            logger.info(f"Training STOPPED at epoch {record.current_epoch}/{record.total_epochs}")
+        logger.info(f"Result model: {record.result_path or 'none'}")
         record.stop_event.set()
         record.finished_at = datetime.now(timezone.utc)
+        # Remove the ultralytics handler
+        ul_logger.removeHandler(ul_handler)
+        ul_handler.close()
+        # flush and close the job logger
+        for h in logger.handlers:
+            h.flush()
+            h.close()
 
 
 class YoloTrainer(BaseTrainer):
