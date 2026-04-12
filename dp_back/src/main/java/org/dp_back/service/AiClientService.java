@@ -78,6 +78,23 @@ public class AiClientService {
         }
     }
 
+    public Optional<String> getJobLogs(String jobId) {
+        String url = aiBaseUrl + "/train/" + jobId + "/logs?lines=500";
+        try {
+            String logs = restTemplate.getForObject(url, String.class);
+            return Optional.ofNullable(logs);
+        } catch (HttpClientErrorException ex) {
+            if (ex.getStatusCode() == HttpStatus.NOT_FOUND) {
+                return Optional.empty();
+            }
+            log.error("Error fetching logs for job {}: {}", jobId, ex.getMessage());
+            return Optional.empty();
+        } catch (Exception ex) {
+            log.error("AI service unreachable when fetching logs for job {}: {}", jobId, ex.getMessage());
+            return Optional.empty();
+        }
+    }
+
     public boolean isHealthy() {
         try {
             restTemplate.getForObject(aiBaseUrl + "/health", Map.class);

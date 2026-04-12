@@ -27,12 +27,14 @@ services:
     environment:
       - DATA_DIR=/data
       - TRAINER_TYPE=yolo
+      - MPLBACKEND=Agg
     volumes:
       - dp_data:/data
     ports:
       - "8000:8000"
     networks:
       - dp_network
+    shm_size: '2gb'
     deploy:
       resources:
         reservations:
@@ -40,7 +42,6 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
-    runtime: nvidia
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 10s

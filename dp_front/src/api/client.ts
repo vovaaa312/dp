@@ -110,4 +110,7 @@ export const deleteModel = (jobId: string): Promise<{message: string}> =>
 export const renameJob = (jobId: string, displayName: string): Promise<Job> =>
   api.patch<Job>(`/jobs/${jobId}/name`, { displayName }).then(r => r.data);
 
+export const getJobLogs = (jobId: string): Promise<string> =>
+  api.get<string>(`/jobs/${jobId}/logs`, { responseType: 'text' }).then(r => r.data);
+
 export default api;

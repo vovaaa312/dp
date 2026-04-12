@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime
 
 WORKDIR /app
 
@@ -14,7 +14,7 @@ COPY app/ ./app/
 COPY yolov8n.pt .
 
 ENV DATA_DIR=/data \
-    TRAINER_TYPE=mock \
+    TRAINER_TYPE=yolo \
     AI_HOST=0.0.0.0 \
     AI_PORT=8000
 

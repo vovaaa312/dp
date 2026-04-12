@@ -22,6 +22,7 @@ class JobRecord:
         self.finished_at: Optional[datetime] = None
         self.error: Optional[str] = None
         self.result_path: Optional[str] = None
+        self.log_path: Optional[str] = None
         self.stop_event: threading.Event = threading.Event()
 
     def to_response(self) -> JobStatusResponse:
