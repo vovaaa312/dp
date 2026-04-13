@@ -1,7 +1,7 @@
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 
-const links = [
+const baseLinks = [
   { to: '/', label: 'Training Jobs' },
   { to: '/datasets', label: 'Datasets' },
   { to: '/inference', label: 'Inference' },
@@ -15,6 +15,10 @@ export function NavBar() {
     logout();
     navigate('/login', { replace: true });
   };
+
+  const links = user?.role === 'ADMIN'
+    ? [...baseLinks, { to: '/admin', label: 'Admin' }]
+    : baseLinks;
 
   return (
     <nav style={styles.nav}>

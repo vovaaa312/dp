@@ -113,4 +113,35 @@ export const renameJob = (jobId: string, displayName: string): Promise<Job> =>
 export const getJobLogs = (jobId: string): Promise<string> =>
   api.get<string>(`/jobs/${jobId}/logs`, { responseType: 'text' }).then(r => r.data);
 
+// Admin
+export interface AdminUser {
+  id: number;
+  username: string;
+  email: string;
+  role: string;
+  createdAt: string;
+}
+
+export const getAdminUsers = (): Promise<AdminUser[]> =>
+  api.get<AdminUser[]>('/admin/users').then(r => r.data);
+
+export const changeUserRole = (userId: number, role: string): Promise<{message: string}> =>
+  api.patch<{message: string}>(`/admin/users/${userId}/role`, { role }).then(r => r.data);
+
+export const deleteUser = (userId: number): Promise<{message: string}> =>
+  api.delete<{message: string}>(`/admin/users/${userId}`).then(r => r.data);
+
+export const createBackup = async (): Promise<Blob> => {
+  const res = await api.post('/admin/backup', null, { responseType: 'blob' });
+  return res.data;
+};
+
+export const restoreBackup = (file: File): Promise<{message: string}> => {
+  const form = new FormData();
+  form.append('file', file);
+  return api.post<{message: string}>('/admin/restore', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }).then(r => r.data);
+};
+
 export default api;
