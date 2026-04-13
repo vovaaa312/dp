@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '../context/AuthContext';
 import {
   getAdminUsers,
   changeUserRole,
@@ -10,6 +11,7 @@ import {
 } from '../api/client';
 
 export function AdminPage() {
+  const { user: currentUser } = useAuth();
   const queryClient = useQueryClient();
   const { data: users, isLoading } = useQuery({
     queryKey: ['admin-users'],
@@ -84,7 +86,12 @@ export function AdminPage() {
                 <UserRow
                   key={u.id}
                   user={u}
-                  onRoleChange={(role) => roleMutation.mutate({ userId: u.id, role })}
+                  isSelf={u.username === currentUser?.username}
+                  onRoleChange={(role) => {
+                    if (window.confirm(`Change role of "${u.username}" to ${role}?`)) {
+                      roleMutation.mutate({ userId: u.id, role });
+                    }
+                  }}
                   onDelete={() => {
                     if (window.confirm(`Delete user "${u.username}" and all their data?`)) {
                       deleteMutation.mutate(u.id);
@@ -132,36 +139,45 @@ export function AdminPage() {
 }
 
 function UserRow({
-  user, onRoleChange, onDelete, roleLoading, deleteLoading,
+  user, isSelf, onRoleChange, onDelete, roleLoading, deleteLoading,
 }: {
   user: AdminUser;
+  isSelf: boolean;
   onRoleChange: (role: string) => void;
   onDelete: () => void;
   roleLoading: boolean;
   deleteLoading: boolean;
 }) {
+  const roleDisabled = roleLoading || isSelf;
+
   return (
     <tr style={styles.row}>
       <td style={styles.td}>{user.id}</td>
-      <td style={styles.td}>{user.username}</td>
+      <td style={styles.td}>
+        {user.username}
+        {isSelf && <span style={styles.selfBadge}>you</span>}
+      </td>
       <td style={styles.td}>{user.email}</td>
       <td style={styles.td}>
         <select
-          style={styles.roleSelect}
+          style={{ ...styles.roleSelect, opacity: roleDisabled ? 0.4 : 1 }}
           value={user.role}
           onChange={e => onRoleChange(e.target.value)}
-          disabled={roleLoading}
+          disabled={roleDisabled}
+          title={isSelf ? 'Cannot change your own role' : ''}
         >
           <option value="USER">USER</option>
           <option value="ADMIN">ADMIN</option>
         </select>
+        {isSelf && <span style={styles.lockedHint}>locked</span>}
       </td>
       <td style={styles.td}>{new Date(user.createdAt).toLocaleDateString()}</td>
       <td style={styles.td}>
         <button
-          style={styles.deleteBtn}
+          style={{ ...styles.deleteBtn, opacity: isSelf ? 0.4 : 1 }}
           onClick={onDelete}
-          disabled={deleteLoading}
+          disabled={deleteLoading || isSelf}
+          title={isSelf ? 'Cannot delete yourself' : ''}
         >
           Delete
         </button>
@@ -209,6 +225,21 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 600,
     cursor: 'pointer',
     padding: '4px 12px',
+  },
+  selfBadge: {
+    marginLeft: 6,
+    fontSize: 10,
+    background: '#2a2a5e',
+    color: '#8888ff',
+    borderRadius: 4,
+    padding: '1px 5px',
+    fontWeight: 600,
+  },
+  lockedHint: {
+    marginLeft: 6,
+    fontSize: 10,
+    color: '#4040aa',
+    fontStyle: 'italic' as const,
   },
   backupRow: { display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 },
   primaryBtn: {

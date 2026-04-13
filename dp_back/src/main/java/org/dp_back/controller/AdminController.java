@@ -45,7 +45,9 @@ public class AdminController {
     }
 
     @PatchMapping("/users/{userId}/role")
-    public ResponseEntity<?> changeRole(@PathVariable Long userId, @RequestBody Map<String, String> body) {
+    public ResponseEntity<?> changeRole(@PathVariable Long userId,
+                                        @RequestBody Map<String, String> body,
+                                        java.security.Principal principal) {
         String roleStr = body.get("role");
         if (roleStr == null) {
             return ResponseEntity.badRequest().body(Map.of("error", "role is required"));
@@ -59,6 +61,10 @@ public class AdminController {
 
         return userRepository.findById(userId)
                 .map(user -> {
+                    if (user.getUsername().equals(principal.getName())) {
+                        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                                .body(Map.of("error", "Cannot change your own role"));
+                    }
                     user.setRole(role);
                     userRepository.save(user);
                     return ResponseEntity.ok(Map.of("message", "Role updated to " + role.name()));
