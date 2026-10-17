@@ -24,6 +24,12 @@ export interface EpochMetrics {
   dfl_loss: number;
   mAP50: number;
   mAP50_95: number;
+  precision: number;
+  recall: number;
+  f1: number;
+  accuracy: number;
+  confusion_matrix?: number[][] | null;
+  confusion_matrix_labels?: string[] | null;
 }
 
 export interface Job {
@@ -42,6 +48,12 @@ export interface Job {
   error: string | null;
   resultPath: string | null;
   displayName: string | null;
+  device: string | null;
+  deviceFallback: boolean;
+  learningRate: number;
+  patience: number;
+  seed: number;
+  devicePreference: 'auto' | 'gpu' | 'cpu';
 }
 
 export interface CreateJobPayload {
@@ -51,6 +63,10 @@ export interface CreateJobPayload {
   imgsz: number;
   batch: number;
   trainerType: string;
+  learningRate: number;
+  patience: number;
+  seed: number;
+  devicePreference: 'auto' | 'gpu' | 'cpu';
 }
 
 export interface Detection {

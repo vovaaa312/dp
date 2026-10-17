@@ -8,6 +8,7 @@ from app.schemas.training import TrainRequest, TrainResponse, JobStatusResponse
 from app.services.job_store import job_store
 from app.services.mock_trainer import MockTrainer
 from app.services.yolo_trainer import YoloTrainer
+from app.services.torchvision_trainer import TorchvisionTrainer
 from app.services.trainer_base import BaseTrainer
 
 router = APIRouter(prefix="/train", tags=["training"])
@@ -17,7 +18,13 @@ def _get_trainer(trainer_type: str) -> BaseTrainer:
     t = trainer_type.lower() if trainer_type else settings.trainer_type.lower()
     if t == "yolo":
         return YoloTrainer()
-    return MockTrainer()
+    if t == "ssd":
+        return TorchvisionTrainer("ssd")
+    if t == "faster_rcnn":
+        return TorchvisionTrainer("faster_rcnn")
+    if t == "mock":
+        return MockTrainer()
+    raise ValueError(f"Unsupported trainer type: {trainer_type}")
 
 
 @router.post("", response_model=TrainResponse, status_code=status.HTTP_202_ACCEPTED)

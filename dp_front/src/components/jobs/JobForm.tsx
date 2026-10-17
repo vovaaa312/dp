@@ -12,13 +12,19 @@ const DEFAULT_MODEL = 'yolov8n.pt';
 
 export function JobForm({ datasets, onCreated }: Props) {
   const queryClient = useQueryClient();
+  const [learningRateInput, setLearningRateInput] = useState('0.001');
+  const [validationError, setValidationError] = useState<string | null>(null);
   const [form, setForm] = useState<CreateJobPayload>({
     datasetName: datasets[0] ?? '',
     modelName: DEFAULT_MODEL,
     epochs: 10,
     imgsz: 640,
     batch: 8,
-    trainerType: 'mock',
+    trainerType: 'yolo',
+    learningRate: 0.001,
+    patience: 10,
+    seed: 42,
+    devicePreference: 'auto',
   });
 
   const mutation = useMutation({
@@ -32,9 +38,25 @@ export function JobForm({ datasets, onCreated }: Props) {
   const set = <K extends keyof CreateJobPayload>(key: K, value: CreateJobPayload[K]) =>
     setForm(prev => ({ ...prev, [key]: value }));
 
+  const setTrainer = (trainerType: string) => {
+    const defaults: Record<string, { modelName: string; imgsz: number; batch: number }> = {
+      yolo: { modelName: 'yolov8n.pt', imgsz: 640, batch: 8 },
+      ssd: { modelName: 'ssd300_vgg16', imgsz: 300, batch: 4 },
+      faster_rcnn: { modelName: 'fasterrcnn_resnet50_fpn', imgsz: 320, batch: 2 },
+      mock: { modelName: 'mock', imgsz: 320, batch: 8 },
+    };
+    setForm(prev => ({ ...prev, trainerType, ...defaults[trainerType] }));
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    mutation.mutate(form);
+    const learningRate = Number(learningRateInput.trim().replace(',', '.'));
+    if (!Number.isFinite(learningRate) || learningRate <= 0 || learningRate > 1) {
+      setValidationError('Learning rate must be greater than 0 and at most 1 (for example 0.001 or 0,001).');
+      return;
+    }
+    setValidationError(null);
+    mutation.mutate({ ...form, learningRate });
   };
 
   return (
@@ -72,10 +94,12 @@ export function JobForm({ datasets, onCreated }: Props) {
         <select
           style={styles.select}
           value={form.trainerType}
-          onChange={e => set('trainerType', e.target.value)}
+          onChange={e => setTrainer(e.target.value)}
         >
           <option value="mock">Mock (fast demo, no GPU)</option>
-          <option value="yolo">YOLO (real training, GPU recommended)</option>
+          <option value="yolo">YOLOv8n (GPU with automatic CPU fallback)</option>
+          <option value="ssd">SSD300 VGG16</option>
+          <option value="faster_rcnn">Faster R-CNN ResNet50 FPN</option>
         </select>
       </div>
 
@@ -95,7 +119,7 @@ export function JobForm({ datasets, onCreated }: Props) {
           <input
             style={styles.input}
             type="number"
-            min={32} max={1920} step={32}
+            min={32} max={1920} step={1}
             value={form.imgsz}
             onChange={e => set('imgsz', Number(e.target.value))}
           />
@@ -112,9 +136,59 @@ export function JobForm({ datasets, onCreated }: Props) {
         </div>
       </div>
 
-      {mutation.isError && (
+      <div style={styles.quadRow}>
+        <div>
+          <label style={styles.label}>Learning rate</label>
+          <input
+            style={styles.input}
+            type="text"
+            inputMode="decimal"
+            value={learningRateInput}
+            onChange={e => {
+              setLearningRateInput(e.target.value);
+              setValidationError(null);
+            }}
+            placeholder="0.001 or 0,001"
+            title="Use a dot or comma as the decimal separator"
+          />
+        </div>
+        <div>
+          <label style={styles.label}>Early stopping patience (0 = off)</label>
+          <input
+            style={styles.input}
+            type="number"
+            min={0} max={1000}
+            value={form.patience}
+            onChange={e => set('patience', Number(e.target.value))}
+          />
+        </div>
+        <div>
+          <label style={styles.label}>Random seed</label>
+          <input
+            style={styles.input}
+            type="number"
+            min={0}
+            value={form.seed}
+            onChange={e => set('seed', Number(e.target.value))}
+          />
+        </div>
+        <div>
+          <label style={styles.label}>Device</label>
+          <select
+            style={styles.select}
+            value={form.devicePreference}
+            onChange={e => set('devicePreference', e.target.value as CreateJobPayload['devicePreference'])}
+          >
+            <option value="auto">Auto (prefer GPU)</option>
+            <option value="gpu">GPU (CPU fallback on error)</option>
+            <option value="cpu">CPU only</option>
+          </select>
+        </div>
+      </div>
+
+      {(validationError || mutation.isError) && (
         <div style={styles.error}>
-          {(mutation.error as Error).message}
+          {validationError ?? (mutation.error as Error).message}
         </div>
       )}
 
@@ -149,6 +223,12 @@ const styles: Record<string, React.CSSProperties> = {
   tripleRow: {
     display: 'grid',
     gridTemplateColumns: '1fr 1fr 1fr',
+    gap: 12,
+    marginBottom: 12,
+  },
+  quadRow: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
     gap: 12,
     marginBottom: 12,
   },

@@ -38,4 +38,9 @@ public class AiJobStatusResponse {
 
     @JsonProperty("result_path")
     private String resultPath;
+
+    private String device;
+
+    @JsonProperty("device_fallback")
+    private boolean deviceFallback;
 }

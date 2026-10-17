@@ -30,4 +30,10 @@ public class JobResponse {
     private String error;
     private String resultPath;
     private String displayName;
+    private String device;
+    private boolean deviceFallback;
+    private double learningRate;
+    private int patience;
+    private int seed;
+    private String devicePreference;
 }

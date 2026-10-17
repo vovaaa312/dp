@@ -23,7 +23,10 @@ class JobRecord:
         self.error: Optional[str] = None
         self.result_path: Optional[str] = None
         self.log_path: Optional[str] = None
+        self.device: Optional[str] = None
+        self.device_fallback: bool = False
         self.stop_event: threading.Event = threading.Event()
+        self.metrics_lock: threading.Lock = threading.Lock()
 
     def to_response(self) -> JobStatusResponse:
         return JobStatusResponse(
@@ -37,6 +40,8 @@ class JobRecord:
             finished_at=self.finished_at,
             error=self.error,
             result_path=self.result_path,
+            device=self.device,
+            device_fallback=self.device_fallback,
         )
 
 

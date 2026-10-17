@@ -13,8 +13,8 @@ router = APIRouter(prefix="/predict", tags=["inference"])
 
 
 def _run_yolo_inference(image_path: str, model_path: str, conf: float) -> PredictResponse:
-    """Run real YOLO inference. Raises RuntimeError if ultralytics unavailable."""
-    from ultralytics import YOLO  # lazy import
+    """Run real YOLO inference."""
+    from ultralytics import YOLO
 
     t0 = time.perf_counter()
     model = YOLO(model_path)
@@ -22,18 +22,18 @@ def _run_yolo_inference(image_path: str, model_path: str, conf: float) -> Predic
     elapsed_ms = (time.perf_counter() - t0) * 1000
 
     detections: list[Detection] = []
-    for r in results:
-        if r.boxes is None:
+    for result in results:
+        if result.boxes is None:
             continue
-        names = r.names
-        for box in r.boxes:
-            cls_id = int(box.cls[0].item())
+        names = result.names
+        for box in result.boxes:
+            class_id = int(box.cls[0].item())
             detections.append(
                 Detection(
-                    class_id=cls_id,
-                    class_name=names.get(cls_id, str(cls_id)),
+                    class_id=class_id,
+                    class_name=names.get(class_id, str(class_id)),
                     confidence=round(float(box.conf[0].item()), 4),
-                    bbox=[round(x, 1) for x in box.xyxy[0].tolist()],
+                    bbox=[round(value, 1) for value in box.xyxy[0].tolist()],
                 )
             )
 
@@ -43,6 +43,82 @@ def _run_yolo_inference(image_path: str, model_path: str, conf: float) -> Predic
         inference_time_ms=round(elapsed_ms, 2),
         model_path=model_path,
     )
+
+
+def _run_torchvision_inference(image_path: str, model_path: str, conf: float) -> PredictResponse:
+    """Run SSD or Faster R-CNN inference from our portable checkpoint."""
+    import torch
+    from PIL import Image
+    from torchvision.transforms.functional import pil_to_tensor
+
+    from app.services.torchvision_trainer import _build_model
+    from app.services.yolo_trainer import _is_cuda_error
+
+    t0 = time.perf_counter()
+    state = torch.load(model_path, map_location="cpu", weights_only=True)
+    architecture = state.get("architecture")
+    if architecture not in {"ssd", "faster_rcnn"}:
+        raise ValueError(f"Unsupported checkpoint architecture: {architecture}")
+    names = list(state.get("names") or [])
+    if not names:
+        raise ValueError("Checkpoint does not contain class names")
+    image_size = int(state.get("image_size", 300 if architecture == "ssd" else 640))
+    model = _build_model(architecture, len(names) + 1, image_size, pretrained=False)
+    model.load_state_dict(state["model_state_dict"])
+    model.eval()
+
+    with Image.open(image_path) as source:
+        image = pil_to_tensor(source.convert("RGB")).float().div(255.0)
+
+    def predict(device: str):
+        model.to(device)
+        with torch.no_grad():
+            return model([image.to(device)])[0]
+
+    device = "cuda:0" if torch.cuda.is_available() else "cpu"
+    try:
+        prediction = predict(device)
+    except BaseException as first_error:
+        if device.startswith("cuda") and _is_cuda_error(first_error):
+            model.to("cpu")
+            torch.cuda.empty_cache()
+            prediction = predict("cpu")
+        else:
+            raise
+
+    detections: list[Detection] = []
+    boxes = prediction["boxes"].detach().cpu()
+    labels = prediction["labels"].detach().cpu()
+    scores = prediction["scores"].detach().cpu()
+    for box, label, score in zip(boxes, labels, scores):
+        confidence = float(score)
+        if confidence < conf:
+            continue
+        class_id = int(label) - 1
+        if not 0 <= class_id < len(names):
+            continue
+        detections.append(
+            Detection(
+                class_id=class_id,
+                class_name=names[class_id],
+                confidence=round(confidence, 4),
+                bbox=[round(float(value), 1) for value in box.tolist()],
+            )
+        )
+
+    elapsed_ms = (time.perf_counter() - t0) * 1000
+    return PredictResponse(
+        detections=detections,
+        image_path=image_path,
+        inference_time_ms=round(elapsed_ms, 2),
+        model_path=model_path,
+    )
+
+
+def _run_real_inference(image_path: str, model_path: str, conf: float) -> PredictResponse:
+    if Path(model_path).suffix.lower() == ".pth":
+        return _run_torchvision_inference(image_path, model_path, conf)
+    return _run_yolo_inference(image_path, model_path, conf)
 
 
 def _is_mock_model(model_path: str) -> bool:
@@ -55,7 +131,7 @@ def _is_mock_model(model_path: str) -> bool:
 
 
 def _run_mock_inference(image_path: str, model_path: str) -> PredictResponse:
-    """Return synthetic detections when ultralytics is unavailable or model is mock."""
+    """Return synthetic detections for a deliberately selected mock model."""
     import random
     detections = [
         Detection(class_id=0, class_name="buffalo", confidence=round(0.75 + random.uniform(-0.1, 0.15), 2), bbox=[80.0, 40.0, 310.0, 390.0]),
@@ -81,17 +157,13 @@ async def predict_from_upload(
     suffix = Path(file.filename or "image.jpg").suffix or ".jpg"
     image_filename = f"{uuid.uuid4().hex}{suffix}"
     image_path = settings.uploads_dir / image_filename
-
-    content = await file.read()
-    image_path.write_bytes(content)
+    image_path.write_bytes(await file.read())
 
     if _is_mock_model(model_path):
         return _run_mock_inference(str(image_path), model_path)
 
     try:
-        return _run_yolo_inference(str(image_path), model_path, conf)
-    except ImportError:
-        return _run_mock_inference(str(image_path), model_path)
+        return _run_real_inference(str(image_path), model_path, conf)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Inference failed: {exc}") from exc
 
@@ -106,8 +178,6 @@ def predict_by_path(request: PredictRequest) -> PredictResponse:
         return _run_mock_inference(request.image_path, request.model_path)
 
     try:
-        return _run_yolo_inference(request.image_path, request.model_path, request.conf)
-    except ImportError:
-        return _run_mock_inference(request.image_path, request.model_path)
+        return _run_real_inference(request.image_path, request.model_path, request.conf)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Inference failed: {exc}") from exc

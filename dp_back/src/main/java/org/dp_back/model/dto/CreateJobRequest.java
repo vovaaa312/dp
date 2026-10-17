@@ -24,4 +24,14 @@ public class CreateJobRequest {
     private int batch = 8;
 
     private String trainerType = "mock";
+
+    private double learningRate = 0.001;
+
+    @Min(0) @Max(1000)
+    private int patience = 10;
+
+    @Min(0)
+    private int seed = 42;
+
+    private String devicePreference = "auto";
 }

@@ -4,7 +4,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useJob } from '../hooks/useJob';
 import { stopJob, resumeJob, deleteModel, renameJob, getJobLogs } from '../api/client';
 import { MetricsChart } from '../components/charts/MetricsChart';
+import { ConfusionMatrix } from '../components/charts/ConfusionMatrix';
 import { StatusBadge } from '../components/jobs/StatusBadge';
+
+const formatPercent = (value: number | undefined) =>
+  value == null ? '—' : (value * 100).toFixed(1) + '%';
 
 export function JobDetailPage() {
   const { jobId } = useParams<{ jobId: string }>();
@@ -161,15 +165,27 @@ export function JobDetailPage() {
 
         {job.metrics && (
           <>
-            <StatBox label="mAP50" value={`${(job.metrics.mAP50 * 100).toFixed(1)}%`} />
-            <StatBox label="Box Loss" value={job.metrics.box_loss.toFixed(4)} />
-            <StatBox label="Cls Loss" value={job.metrics.cls_loss.toFixed(4)} />
+            <StatBox label="Accuracy" value={formatPercent(job.metrics.accuracy)} />
+            <StatBox label="Precision" value={formatPercent(job.metrics.precision)} />
+            <StatBox label="Recall" value={formatPercent(job.metrics.recall)} />
+            <StatBox label="F1" value={formatPercent(job.metrics.f1)} />
+            <StatBox label="mAP@50" value={formatPercent(job.metrics.mAP50)} />
+            <StatBox label="mAP@50–95" value={formatPercent(job.metrics.mAP50_95)} />
           </>
         )}
       </div>
 
       <h3 style={styles.sectionTitle}>Training Curves</h3>
       <MetricsChart history={job.metricsHistory ?? []} />
+
+      <div style={styles.metricGuide}>
+        <strong>Metric guide:</strong> Accuracy is TP / (TP + FP + FN), without true negatives.
+        Precision measures how many detections are correct; recall measures how many objects were found.
+        F1 balances precision and recall. mAP@50 uses IoU 0.50; mAP@50–95 averages stricter IoU thresholds.
+      </div>
+
+      <h3 style={styles.sectionTitle}>Confusion Matrix</h3>
+      <ConfusionMatrix history={job.metricsHistory ?? []} />
 
       <h3 style={styles.sectionTitle}>Training Log</h3>
       <pre ref={logBoxRef} style={styles.logBox}>
@@ -198,6 +214,12 @@ export function JobDetailPage() {
         <MetaRow label="Dataset" value={job.datasetName} />
         <MetaRow label="Model" value={job.modelName} />
         <MetaRow label="Trainer" value={job.trainerType} />
+        {job.device && <MetaRow label="Device" value={job.device} />}
+        {job.deviceFallback && <MetaRow label="Fallback" value="GPU failed; continued automatically on CPU" />}
+        {job.learningRate > 0 && <MetaRow label="Learning rate" value={String(job.learningRate)} />}
+        <MetaRow label="Patience" value={String(job.patience)} />
+        <MetaRow label="Seed" value={String(job.seed)} />
+        {job.devicePreference && <MetaRow label="Device mode" value={job.devicePreference} />}
         {job.createdAt && <MetaRow label="Created" value={new Date(job.createdAt).toLocaleString()} />}
         {job.startedAt && <MetaRow label="Started" value={new Date(job.startedAt).toLocaleString()} />}
         {job.finishedAt && <MetaRow label="Finished" value={new Date(job.finishedAt).toLocaleString()} />}
@@ -250,6 +272,7 @@ const styles: Record<string, React.CSSProperties> = {
   progressBar: { marginTop: 8, height: 6, background: '#2d2d4e', borderRadius: 3, overflow: 'hidden' },
   progressFill: { height: '100%', background: 'linear-gradient(90deg, #4444ff, #8888ff)', borderRadius: 3, transition: 'width 0.5s ease' },
   sectionTitle: { fontSize: 15, color: '#8080bb', fontWeight: 600, marginBottom: 12, marginTop: 0 },
+  metricGuide: { marginBottom: 20, padding: '12px 16px', background: '#15152a', border: '1px solid #2d2d4e', borderRadius: 8, color: '#9090bb', fontSize: 12, lineHeight: 1.6 },
   errorBox: { marginTop: 16, padding: '12px 16px', background: '#3a1a1a', border: '1px solid #6a2a2a', borderRadius: 8, color: '#ff8888', fontSize: 13 },
   resultBox: { marginTop: 16, padding: '12px 16px', background: '#1a3a1a', border: '1px solid #2a6a2a', borderRadius: 8, color: '#88ff88', fontSize: 13 },
   code: { fontFamily: 'monospace', background: '#0f0f1a', padding: '2px 6px', borderRadius: 4 },

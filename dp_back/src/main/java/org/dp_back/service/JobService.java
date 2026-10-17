@@ -49,6 +49,10 @@ public class JobService {
                 .runName(jobId)
                 .trainerType(request.getTrainerType())
                 .resultsDir(resultsDir)
+                .learningRate(request.getLearningRate())
+                .patience(request.getPatience())
+                .seed(request.getSeed())
+                .devicePreference(request.getDevicePreference())
                 .build();
 
         Job job = Job.builder()
@@ -57,9 +61,15 @@ public class JobService {
                 .modelName(request.getModelName())
                 .totalEpochs(request.getEpochs())
                 .currentEpoch(0)
+                .imageSize(request.getImgsz())
+                .batchSize(request.getBatch())
                 .trainerType(request.getTrainerType())
                 .status(JobStatus.PENDING)
                 .createdAt(Instant.now())
+                .learningRate(request.getLearningRate())
+                .patience(request.getPatience())
+                .seed(request.getSeed())
+                .devicePreference(request.getDevicePreference())
                 .userId(userId)
                 .build();
 
@@ -137,7 +147,9 @@ public class JobService {
         // Use last.pt from previous run to resume
         String resumeFrom = null;
         if (job.getResultPath() != null) {
-            String lastPt = job.getResultPath().replace("best.pt", "last.pt");
+            String lastPt = job.getResultPath()
+                    .replace("best.pt", "last.pt")
+                    .replace("best.pth", "last.pth");
             resumeFrom = lastPt;
         }
 
@@ -145,12 +157,16 @@ public class JobService {
                 .datasetPath(datasetPath)
                 .modelName(resumeFrom != null ? resumeFrom : job.getModelName())
                 .epochs(job.getTotalEpochs())
-                .imgsz(640)
-                .batch(8)
+                .imgsz(job.getImageSize())
+                .batch(job.getBatchSize())
                 .runName(jobId)
                 .trainerType(job.getTrainerType())
                 .resultsDir(resultsDir)
                 .resumeFrom(resumeFrom)
+                .learningRate(job.getLearningRate())
+                .patience(job.getPatience())
+                .seed(job.getSeed())
+                .devicePreference(job.getDevicePreference())
                 .build();
 
         try {
@@ -193,6 +209,8 @@ public class JobService {
             if (ai.getFinishedAt() != null) job.setFinishedAt(ai.getFinishedAt());
             if (ai.getError() != null) job.setError(ai.getError());
             if (ai.getResultPath() != null) job.setResultPath(ai.getResultPath());
+            if (ai.getDevice() != null) job.setDevice(ai.getDevice());
+            job.setDeviceFallback(ai.isDeviceFallback());
 
             jobRepository.save(job);
         });
@@ -263,6 +281,12 @@ public class JobService {
                 .error(job.getError())
                 .resultPath(job.getResultPath())
                 .displayName(job.getDisplayName())
+                .device(job.getDevice())
+                .deviceFallback(job.isDeviceFallback())
+                .learningRate(job.getLearningRate())
+                .patience(job.getPatience())
+                .seed(job.getSeed())
+                .devicePreference(job.getDevicePreference())
                 .build();
     }
 }

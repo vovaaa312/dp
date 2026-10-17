@@ -28,6 +28,7 @@ services:
       DATA_DIR: /data
       TRAINER_TYPE: yolo
       MPLBACKEND: Agg
+      TORCH_HOME: /data/torch-cache
     volumes:
       - dp_data:/data
     ports:

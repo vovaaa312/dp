@@ -4,7 +4,7 @@ from typing import Optional
 
 class PredictRequest(BaseModel):
     image_path: str = Field(..., description="Absolute path to the image file")
-    model_path: str = Field(..., description="Absolute path to the .pt model file")
+    model_path: str = Field(..., description="Absolute path to the .pt or .pth model file")
     conf: float = Field(default=0.25, ge=0.01, le=1.0)
 
 

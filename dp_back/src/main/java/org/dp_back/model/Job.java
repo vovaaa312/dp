@@ -24,6 +24,8 @@ public class Job {
     private String modelName;
     private int totalEpochs;
     private int currentEpoch;
+    private int imageSize;
+    private int batchSize;
     private String trainerType;
 
     @Enumerated(EnumType.STRING)
@@ -42,9 +44,16 @@ public class Job {
     private Instant startedAt;
     private Instant finishedAt;
 
+    @Column(columnDefinition = "TEXT")
     private String error;
     private String resultPath;
     private String displayName;
+    private String device;
+    private boolean deviceFallback;
+    private double learningRate;
+    private int patience;
+    private int seed;
+    private String devicePreference;
 
     // FK to users table — no JPA relation to keep it simple
     private Long userId;

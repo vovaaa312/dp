@@ -14,7 +14,8 @@ export function InferencePage() {
   const [datasetFilter, setDatasetFilter] = useState<string>('ALL');
   const [minEpochs, setMinEpochs] = useState('');
   const [selectedModelPath, setSelectedModelPath] = useState('yolov8n.pt');
-  const [conf, setConf] = useState(0.25);
+  const [confInput, setConfInput] = useState('0.25');
+  const [validationError, setValidationError] = useState<string | null>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [result, setResult] = useState<PredictResponse | null>(null);
 
@@ -52,6 +53,12 @@ export function InferencePage() {
 
   const handleRun = () => {
     if (!imageFile) return;
+    const conf = Number(confInput.trim().replace(',', '.'));
+    if (!Number.isFinite(conf) || conf < 0.01 || conf > 1) {
+      setValidationError('Confidence threshold must be between 0.01 and 1 (for example 0.25 or 0,25).');
+      return;
+    }
+    setValidationError(null);
     setResult(null);
     mutation.mutate({ file: imageFile, modelPath: selectedModelPath, conf });
   };
@@ -142,10 +149,16 @@ export function InferencePage() {
           <label style={styles.label}>Confidence threshold</label>
           <input
             style={styles.input}
-            type="number"
-            min={0.01} max={1.0} step={0.05}
-            value={conf}
-            onChange={e => setConf(parseFloat(e.target.value))}
+            type="text"
+            inputMode="decimal"
+            value={confInput}
+            onChange={e => {
+              setConfInput(e.target.value);
+              setValidationError(null);
+              mutation.reset();
+            }}
+            placeholder="0.25 or 0,25"
+            title="Use a dot or comma; allowed range is 0.01 to 1"
           />
         </div>
         <div style={styles.field}>
@@ -163,9 +176,9 @@ export function InferencePage() {
         {mutation.isPending ? 'Running inference…' : 'Run Inference'}
       </button>
 
-      {mutation.isError && (
+      {(validationError || mutation.isError) && (
         <div style={styles.errorBox}>
-          Inference failed: {(mutation.error as Error).message}
+          {validationError ?? `Inference failed: ${(mutation.error as Error).message}`}
         </div>
       )}
 

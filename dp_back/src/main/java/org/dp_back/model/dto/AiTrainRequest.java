@@ -29,4 +29,13 @@ public class AiTrainRequest {
 
     @JsonProperty("resume_from")
     private String resumeFrom;
+
+    @JsonProperty("learning_rate")
+    private double learningRate;
+
+    private int patience;
+    private int seed;
+
+    @JsonProperty("device_preference")
+    private String devicePreference;
 }
