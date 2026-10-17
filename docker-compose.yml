@@ -1,0 +1,102 @@
+services:
+
+  db:
+    image: postgres:16-alpine
+    container_name: dp_db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-dp_db}
+      POSTGRES_USER: ${POSTGRES_USER:-dp_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - dp_pg_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - dp_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  ai:
+    build:
+      context: ./dp_ai
+      dockerfile: Dockerfile
+    container_name: dp_ai
+    environment:
+      DATA_DIR: /data
+      TRAINER_TYPE: yolo
+      MPLBACKEND: Agg
+    volumes:
+      - dp_data:/data
+    ports:
+      - "8000:8000"
+    networks:
+      - dp_network
+    shm_size: "2gb"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./dp_back
+      dockerfile: Dockerfile
+    container_name: dp_back
+    environment:
+      AI_BASE_URL: http://ai:8000
+      DATA_DIR: /data
+      SERVER_PORT: 8080
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/${POSTGRES_DB:-dp_db}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-dp_user}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      APP_JWT_SECRET: ${APP_JWT_SECRET:?Set APP_JWT_SECRET in .env}
+      APP_JWT_EXPIRATION_MS: ${APP_JWT_EXPIRATION_MS:-86400000}
+    volumes:
+      - dp_data:/data
+    ports:
+      - "8080:8080"
+    networks:
+      - dp_network
+    depends_on:
+      db:
+        condition: service_healthy
+      ai:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  frontend:
+    build:
+      context: ./dp_front
+      dockerfile: Dockerfile
+    container_name: dp_front
+    ports:
+      - "80:80"
+    networks:
+      - dp_network
+    depends_on:
+      - backend
+
+volumes:
+  dp_data:
+    driver: local
+  dp_pg_data:
+    driver: local
+
+networks:
+  dp_network:
+    driver: bridge

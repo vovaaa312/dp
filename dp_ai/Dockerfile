@@ -15,8 +15,10 @@ RUN pip install --no-cache-dir -r requirements.txt \
     && find /opt/conda -name 'tests' -type d -exec rm -rf {} + 2>/dev/null || true \
     && rm -rf /root/.cache/pip
 
+# Cache the default model in the image without storing binary weights in Git.
+RUN python -c "from ultralytics import YOLO; YOLO('yolov8n.pt')"
+
 COPY app/ ./app/
-COPY yolov8n.pt .
 
 ENV DATA_DIR=/data \
     TRAINER_TYPE=yolo \

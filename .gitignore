@@ -4,6 +4,7 @@
 .DS_Store
 Thumbs.db
 desktop.ini
+.vscode/
 *.log
 *.tmp
 *.swp
@@ -28,7 +29,10 @@ desktop.ini
 ############################################
 dp_ai/.venv/
 dp_ai/venv/
+dp_ai/.venv*/
 dp_ai/.python-version
+dp_ai/runs/
+dp_ai/*.pt
 
 **/__pycache__/
 **/*.py[cod]
@@ -73,6 +77,7 @@ dp_front/pnpm-debug.log*
 ############################################
 .env
 .env.*
+!.env.example
 *.local
 *.secret
 *.key
